@@ -5,7 +5,8 @@ terraform {
       version = "4.41.0"
     }
   }
-  
+}
+
 provider "azurerm" {
   # Configuration options
   features {}
