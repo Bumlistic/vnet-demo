@@ -54,68 +54,61 @@ jobs:
             -backend-config="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
 
       # ---------------------------
-      # Format Check
+      # Format & Validate
       # ---------------------------
       - name: Terraform Format Check
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform fmt -check -recursive
 
-      # ---------------------------
-      # Validate Terraform
-      # ---------------------------
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform validate
 
       # ---------------------------
-      # Debug: Check ADMIN_PASSWORD secret
+      # Check Secrets
       # ---------------------------
       - name: Debug Secrets
         shell: pwsh
         run: |
           $env:ADMIN_PASSWORD = "${{ secrets.ADMIN_PASSWORD }}"
           if ([string]::IsNullOrEmpty($env:ADMIN_PASSWORD)) {
-              Write-Host "ERROR: ADMIN_PASSWORD is empty!"
+              Write-Error "❌ ERROR: ADMIN_PASSWORD is empty or missing!"
               exit 1
           } else {
-              Write-Host "ADMIN_PASSWORD is set."
+              Write-Host "✅ ADMIN_PASSWORD is set."
           }
 
       # ---------------------------
-      # Terraform Output Check
+      # Check Outputs
       # ---------------------------
       - name: Terraform Output Check
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
           $env:ADMIN_PASSWORD = "${{ secrets.ADMIN_PASSWORD }}"
-          terraform refresh -var="admin_password=$env:ADMIN_PASSWORD" -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          terraform refresh -var="admin_password=${env:ADMIN_PASSWORD}" -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
 
           Write-Host "`n--- Terraform Outputs ---"
-          $outputsJson = $(terraform output -json)
+          $outputsJson = terraform output -json
           $outputs = $outputsJson | ConvertFrom-Json
           foreach ($key in $outputs.PSObject.Properties.Name) {
               $value = $outputs.PSObject.Properties[$key].Value.value
-              Write-Host "$key: $value"
+              Write-Host "${key}: ${value}"
           }
 
       # ---------------------------
-      # Pre-flight Check: Ensure subnet_id exists
+      # Validate Subnet ID (needed for VM)
       # ---------------------------
       - name: Validate Subnet ID Output
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
-          $env:ADMIN_PASSWORD = "${{ secrets.ADMIN_PASSWORD }}"
-          terraform refresh -var="admin_password=$env:ADMIN_PASSWORD" -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-
-          $subnetId = $(terraform output -raw subnet_id)
+          $subnetId = terraform output -raw subnet_id
           if ([string]::IsNullOrEmpty($subnetId)) {
-              Write-Host "ERROR: subnet_id output from VNet module is empty!"
-              Write-Host "Cannot create VM without a valid subnet."
+              Write-Error "❌ ERROR: subnet_id output from VNet module is empty! VM cannot be created."
               exit 1
           } else {
-              Write-Host "Subnet ID is valid: $subnetId"
+              Write-Host "✅ Subnet ID is valid: ${subnetId}"
           }
 
       # ---------------------------
@@ -127,23 +120,23 @@ jobs:
         run: |
           $env:ADMIN_PASSWORD = "${{ secrets.ADMIN_PASSWORD }}"
           terraform plan -out=${{ env.TF_PLAN_FILE }} `
-            -var="admin_password=$env:ADMIN_PASSWORD" `
+            -var="admin_password=${env:ADMIN_PASSWORD}" `
             -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" `
             -input=false
 
           Write-Host "`n--- Planned Resources ---"
-          $planJson = $(terraform show -json ${{ env.TF_PLAN_FILE }})
+          $planJson = terraform show -json ${{ env.TF_PLAN_FILE }}
           $plan = $planJson | ConvertFrom-Json
           foreach ($res in $plan.planned_values.root_module.resources) {
-              Write-Host "Resource Type: $($res.type), Name: $($res.name)"
+              Write-Host "📦 Resource Type: $($res.type), Name: $($res.name)"
           }
 
       # ---------------------------
-      # Terraform State List
+      # Terraform State (before apply)
       # ---------------------------
       - name: Terraform State List
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform state list || Write-Host "No resources in state yet."
+        run: terraform state list || Write-Host "ℹ️ No resources in state yet."
 
       # ---------------------------
       # Terraform Apply
@@ -156,15 +149,15 @@ jobs:
           terraform apply -auto-approve ${{ env.TF_PLAN_FILE }}
 
       # ---------------------------
-      # Optional: Show VM public IP
+      # Show VM Public IP
       # ---------------------------
       - name: Display VM Public IP
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
-          $vmPublicIp = $(terraform output -raw vm_public_ip)
+          $vmPublicIp = terraform output -raw vm_public_ip
           if ([string]::IsNullOrEmpty($vmPublicIp)) {
-              Write-Host "VM public IP not found (VM may not have been created)."
+              Write-Host "❌ VM public IP not found (VM may not have been created)."
           } else {
-              Write-Host "VM Public IP: $vmPublicIp"
+              Write-Host "🌍 VM Public IP: ${vmPublicIp}"
           }
