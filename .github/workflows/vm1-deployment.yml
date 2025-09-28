@@ -95,7 +95,8 @@ jobs:
           $outputsJson = $(terraform output -json)
           $outputs = $outputsJson | ConvertFrom-Json
           foreach ($key in $outputs.PSObject.Properties.Name) {
-              Write-Host "$key: $($outputs.$key.value)"
+              $value = $outputs.PSObject.Properties[$key].Value.value
+              Write-Host "$key: $value"
           }
 
       # ---------------------------
@@ -153,3 +154,17 @@ jobs:
         run: |
           $env:ADMIN_PASSWORD = "${{ secrets.ADMIN_PASSWORD }}"
           terraform apply -auto-approve ${{ env.TF_PLAN_FILE }}
+
+      # ---------------------------
+      # Optional: Show VM public IP
+      # ---------------------------
+      - name: Display VM Public IP
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: |
+          $vmPublicIp = $(terraform output -raw vm_public_ip)
+          if ([string]::IsNullOrEmpty($vmPublicIp)) {
+              Write-Host "VM public IP not found (VM may not have been created)."
+          } else {
+              Write-Host "VM Public IP: $vmPublicIp"
+          }
