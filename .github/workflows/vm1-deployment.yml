@@ -18,21 +18,21 @@ jobs:
       id-token: write
 
     steps:
-      # ---------------------------
-      # Checkout code
-      # ---------------------------
+      # -----------------------
+      # Checkout Repo
+      # -----------------------
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # ---------------------------
+      # -----------------------
       # Setup Terraform
-      # ---------------------------
+      # -----------------------
       - name: Setup Terraform (latest)
         uses: hashicorp/setup-terraform@v2
 
-      # ---------------------------
+      # -----------------------
       # Azure Login
-      # ---------------------------
+      # -----------------------
       - name: Azure Login
         uses: azure/login@v1
         with:
@@ -40,9 +40,9 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # ---------------------------
+      # -----------------------
       # Terraform Init
-      # ---------------------------
+      # -----------------------
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
@@ -53,9 +53,9 @@ jobs:
             -backend-config="key=${{ secrets.TF_BACKEND_KEY }}" `
             -backend-config="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
 
-      # ---------------------------
-      # Format & Validate
-      # ---------------------------
+      # -----------------------
+      # Terraform Format & Validate
+      # -----------------------
       - name: Terraform Format Check
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform fmt -check -recursive
@@ -64,100 +64,51 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform validate
 
-      # ---------------------------
-      # Check Secrets
-      # ---------------------------
-      - name: Debug Secrets
-        shell: pwsh
-        run: |
-          $env:ADMIN_PASSWORD = "${{ secrets.ADMIN_PASSWORD }}"
-          if ([string]::IsNullOrEmpty($env:ADMIN_PASSWORD)) {
-              Write-Error "❌ ERROR: ADMIN_PASSWORD is empty or missing!"
-              exit 1
-          } else {
-              Write-Host "✅ ADMIN_PASSWORD is set."
-          }
-
-      # ---------------------------
-      # Check Outputs
-      # ---------------------------
-      - name: Terraform Output Check
+      # -----------------------
+      # Terraform Plan
+      # -----------------------
+      - name: Terraform Plan
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
         run: |
-          $env:ADMIN_PASSWORD = "${{ secrets.ADMIN_PASSWORD }}"
-          terraform refresh -var="admin_password=${env:ADMIN_PASSWORD}" -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          terraform plan -out=${{ env.TF_PLAN_FILE }} `
+            -var="admin_password=${{ secrets.ADMIN_PASSWORD }}" `
+            -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" `
+            -input=false
 
-          Write-Host "`n--- Terraform Outputs ---"
-          $outputsJson = terraform output -json
-          $outputs = $outputsJson | ConvertFrom-Json
-          foreach ($key in $outputs.PSObject.Properties.Name) {
-              $value = $outputs.PSObject.Properties[$key].Value.value
-              Write-Host "${key}: ${value}"
-          }
+      # Optional: Show plan JSON for debugging
+      - name: Debug Terraform Plan JSON
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform show -json ${{ env.TF_PLAN_FILE }} > plan.json
 
-      # ---------------------------
-      # Validate Subnet ID (needed for VM)
-      # ---------------------------
-      - name: Validate Subnet ID Output
+      # -----------------------
+      # Terraform Apply
+      # -----------------------
+      - name: Terraform Apply (Auto)
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -auto-approve ${{ env.TF_PLAN_FILE }}
+
+      # -----------------------
+      # Debug Terraform State & Outputs
+      # -----------------------
+      - name: Debug Terraform State & Outputs
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "--- State list ---"
+          terraform state list || echo "⚠️ No state found"
+          echo "--- Outputs ---"
+          terraform output || echo "⚠️ No outputs found"
+
+      # -----------------------
+      # Subnet Validation
+      # -----------------------
+      - name: Validate Subnet Output
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
           $subnetId = terraform output -raw subnet_id
           if ([string]::IsNullOrEmpty($subnetId)) {
-              Write-Error "❌ ERROR: subnet_id output from VNet module is empty! VM cannot be created."
-              exit 1
+            Write-Error "❌ ERROR: subnet_id output from VNet module is empty! VM cannot be created."
+            exit 1
           } else {
-              Write-Host "✅ Subnet ID is valid: ${subnetId}"
-          }
-
-      # ---------------------------
-      # Terraform Plan
-      # ---------------------------
-      - name: Terraform Plan
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
-        run: |
-          $env:ADMIN_PASSWORD = "${{ secrets.ADMIN_PASSWORD }}"
-          terraform plan -out=${{ env.TF_PLAN_FILE }} `
-            -var="admin_password=${env:ADMIN_PASSWORD}" `
-            -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" `
-            -input=false
-
-          Write-Host "`n--- Planned Resources ---"
-          $planJson = terraform show -json ${{ env.TF_PLAN_FILE }}
-          $plan = $planJson | ConvertFrom-Json
-          foreach ($res in $plan.planned_values.root_module.resources) {
-              Write-Host "📦 Resource Type: $($res.type), Name: $($res.name)"
-          }
-
-      # ---------------------------
-      # Terraform State (before apply)
-      # ---------------------------
-      - name: Terraform State List
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform state list || Write-Host "ℹ️ No resources in state yet."
-
-      # ---------------------------
-      # Terraform Apply
-      # ---------------------------
-      - name: Terraform Apply (Auto)
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
-        run: |
-          $env:ADMIN_PASSWORD = "${{ secrets.ADMIN_PASSWORD }}"
-          terraform apply -auto-approve ${{ env.TF_PLAN_FILE }}
-
-      # ---------------------------
-      # Show VM Public IP
-      # ---------------------------
-      - name: Display VM Public IP
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
-        run: |
-          $vmPublicIp = terraform output -raw vm_public_ip
-          if ([string]::IsNullOrEmpty($vmPublicIp)) {
-              Write-Host "❌ VM public IP not found (VM may not have been created)."
-          } else {
-              Write-Host "🌍 VM Public IP: ${vmPublicIp}"
+            Write-Host "✅ Subnet ID found: $subnetId"
           }
