@@ -73,11 +73,12 @@ jobs:
       - name: Debug Secrets
         shell: pwsh
         run: |
-          if (-not ${{ secrets.ADMIN_PASSWORD }}) {
-            Write-Host "ERROR: ADMIN_PASSWORD is empty!"
-            exit 1
+          $env:ADMIN_PASSWORD = "${{ secrets.ADMIN_PASSWORD }}"
+          if ([string]::IsNullOrEmpty($env:ADMIN_PASSWORD)) {
+              Write-Host "ERROR: ADMIN_PASSWORD is empty!"
+              exit 1
           } else {
-            Write-Host "ADMIN_PASSWORD is set."
+              Write-Host "ADMIN_PASSWORD is set."
           }
 
       # ---------------------------
@@ -91,7 +92,7 @@ jobs:
           terraform refresh -var="admin_password=$env:ADMIN_PASSWORD" -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
           Write-Host "`n--- Terraform Outputs ---"
           terraform output -json | ConvertFrom-Json | ForEach-Object {
-            Write-Host "$($_.Key): $($_.Value.value)"
+              Write-Host "$($_.Key): $($_.Value.value)"
           }
 
       # ---------------------------
@@ -127,9 +128,9 @@ jobs:
 
           Write-Host "`n--- Planned Resources ---"
           terraform show -json ${{ env.TF_PLAN_FILE }} | ConvertFrom-Json | ForEach-Object {
-            $_.planned_values.root_module.resources | ForEach-Object {
-              Write-Host "Resource Type: $($_.type), Name: $($_.name)"
-            }
+              $_.planned_values.root_module.resources | ForEach-Object {
+                  Write-Host "Resource Type: $($_.type), Name: $($_.name)"
+              }
           }
 
       # ---------------------------
