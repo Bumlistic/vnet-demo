@@ -25,10 +25,13 @@ jobs:
         uses: actions/checkout@v4
 
       # -----------------------
-      # List Files in Workspace (debug)
+      # List Workspace and Modules
       # -----------------------
       - name: List Files in Working Directory
         run: dir -Recurse
+
+      - name: List Modules Folder
+        run: dir .\modules /s
 
       # -----------------------
       # Setup Terraform
@@ -52,6 +55,24 @@ jobs:
       - name: Terraform Init (Local State)
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform init -reconfigure
+
+      # -----------------------
+      # Print Variables
+      # -----------------------
+      - name: Print Terraform Variables
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: |
+          $vars = @{
+            "resource_group_name" = "vnet1-rg"
+            "location" = "Canada Central"
+            "vnet_name" = "vnet1"
+            "subnet_name" = "vnet1-subnet"
+            "admin_username" = "azureuser"
+            "subscription_id" = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          }
+          Write-Host "=== Terraform Variables ==="
+          $vars.GetEnumerator() | ForEach-Object { Write-Host "$($_.Key) = $($_.Value)" }
 
       # -----------------------
       # Terraform Format & Validate
@@ -78,7 +99,7 @@ jobs:
       # -----------------------
       # Show Plan (Text)
       # -----------------------
-      - name: Show Terraform Plan (text)
+      - name: Show Terraform Plan
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform show ${{ env.TF_PLAN_FILE }}
 
@@ -96,7 +117,7 @@ jobs:
           path: plan.json
 
       # -----------------------
-      # Fail if Plan Has 0 Resources
+      # Fail If Plan Has 0 Resources
       # -----------------------
       - name: Fail If No Resources to Create
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -105,7 +126,7 @@ jobs:
           $planJson = Get-Content -Raw plan.json | ConvertFrom-Json
           $resources = $planJson.resource_changes
           if ($null -eq $resources -or $resources.Count -eq 0) {
-            Write-Error "❌ Terraform plan contains 0 resources. Nothing will be created!"
+            Write-Error "❌ Terraform plan contains 0 resources. Check modules folder and variable values!"
             exit 1
           } else {
             Write-Host "✅ Terraform plan contains $($resources.Count) resource(s) to create/change."
