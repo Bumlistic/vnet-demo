@@ -41,17 +41,11 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       # -----------------------
-      # Terraform Init
+      # Terraform Init (Local State)
       # -----------------------
-      - name: Terraform Init
+      - name: Terraform Init (Local State)
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: |
-          terraform init `
-            -backend-config="resource_group_name=${{ secrets.TF_BACKEND_RESOURCE_GROUP }}" `
-            -backend-config="storage_account_name=${{ secrets.TF_BACKEND_STORAGE_ACCOUNT }}" `
-            -backend-config="container_name=${{ secrets.TF_BACKEND_CONTAINER }}" `
-            -backend-config="key=${{ secrets.TF_BACKEND_KEY }}" `
-            -backend-config="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+        run: terraform init -reconfigure
 
       # -----------------------
       # Terraform Format & Validate
@@ -75,10 +69,25 @@ jobs:
             -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" `
             -input=false
 
-      # Optional: Show plan JSON for debugging
-      - name: Debug Terraform Plan JSON
+      # -----------------------
+      # Show Terraform Plan
+      # -----------------------
+      - name: Show Terraform Plan (text)
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform show ${{ env.TF_PLAN_FILE }}
+
+      # -----------------------
+      # Save Terraform Plan JSON for Debug
+      # -----------------------
+      - name: Save Terraform Plan JSON
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform show -json ${{ env.TF_PLAN_FILE }} > plan.json
+
+      - name: Upload plan.json artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: plan.json
 
       # -----------------------
       # Terraform Apply
@@ -112,3 +121,17 @@ jobs:
           } else {
             Write-Host "✅ Subnet ID found: $subnetId"
           }
+
+      # -----------------------
+      # Optional: Show VM Output
+      # -----------------------
+      - name: Show VM Outputs
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: |
+          $vmId = terraform output -raw vm_id
+          $vmPrivateIP = terraform output -raw vm_private_ip
+          $vmPublicIP = terraform output -raw vm_public_ip
+          Write-Host "✅ VM ID: $vmId"
+          Write-Host "✅ VM Private IP: $vmPrivateIP"
+          Write-Host "✅ VM Public IP: $vmPublicIP"
