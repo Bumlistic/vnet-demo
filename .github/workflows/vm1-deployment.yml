@@ -90,9 +90,12 @@ jobs:
         run: |
           $env:ADMIN_PASSWORD = "${{ secrets.ADMIN_PASSWORD }}"
           terraform refresh -var="admin_password=$env:ADMIN_PASSWORD" -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
           Write-Host "`n--- Terraform Outputs ---"
-          terraform output -json | ConvertFrom-Json | ForEach-Object {
-              Write-Host "$($_.Key): $($_.Value.value)"
+          $outputsJson = $(terraform output -json)
+          $outputs = $outputsJson | ConvertFrom-Json
+          foreach ($key in $outputs.PSObject.Properties.Name) {
+              Write-Host "$key: $($outputs.$key.value)"
           }
 
       # ---------------------------
@@ -104,7 +107,8 @@ jobs:
         run: |
           $env:ADMIN_PASSWORD = "${{ secrets.ADMIN_PASSWORD }}"
           terraform refresh -var="admin_password=$env:ADMIN_PASSWORD" -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-          $subnetId = terraform output -raw subnet_id
+
+          $subnetId = $(terraform output -raw subnet_id)
           if ([string]::IsNullOrEmpty($subnetId)) {
               Write-Host "ERROR: subnet_id output from VNet module is empty!"
               Write-Host "Cannot create VM without a valid subnet."
@@ -127,10 +131,10 @@ jobs:
             -input=false
 
           Write-Host "`n--- Planned Resources ---"
-          terraform show -json ${{ env.TF_PLAN_FILE }} | ConvertFrom-Json | ForEach-Object {
-              $_.planned_values.root_module.resources | ForEach-Object {
-                  Write-Host "Resource Type: $($_.type), Name: $($_.name)"
-              }
+          $planJson = $(terraform show -json ${{ env.TF_PLAN_FILE }})
+          $plan = $planJson | ConvertFrom-Json
+          foreach ($res in $plan.planned_values.root_module.resources) {
+              Write-Host "Resource Type: $($res.type), Name: $($res.name)"
           }
 
       # ---------------------------
