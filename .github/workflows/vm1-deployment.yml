@@ -25,6 +25,12 @@ jobs:
         uses: actions/checkout@v4
 
       # -----------------------
+      # List Files in Workspace (debug)
+      # -----------------------
+      - name: List Files in Working Directory
+        run: dir -Recurse
+
+      # -----------------------
       # Setup Terraform
       # -----------------------
       - name: Setup Terraform (latest)
@@ -70,24 +76,40 @@ jobs:
             -input=false
 
       # -----------------------
-      # Show Terraform Plan
+      # Show Plan (Text)
       # -----------------------
       - name: Show Terraform Plan (text)
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform show ${{ env.TF_PLAN_FILE }}
 
       # -----------------------
-      # Save Terraform Plan JSON for Debug
+      # Save Plan JSON and Upload
       # -----------------------
       - name: Save Terraform Plan JSON
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform show -json ${{ env.TF_PLAN_FILE }} > plan.json
 
-      - name: Upload plan.json artifact
+      - name: Upload plan.json
         uses: actions/upload-artifact@v4
         with:
           name: terraform-plan
           path: plan.json
+
+      # -----------------------
+      # Fail if Plan Has 0 Resources
+      # -----------------------
+      - name: Fail If No Resources to Create
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: |
+          $planJson = Get-Content -Raw plan.json | ConvertFrom-Json
+          $resources = $planJson.resource_changes
+          if ($null -eq $resources -or $resources.Count -eq 0) {
+            Write-Error "❌ Terraform plan contains 0 resources. Nothing will be created!"
+            exit 1
+          } else {
+            Write-Host "✅ Terraform plan contains $($resources.Count) resource(s) to create/change."
+          }
 
       # -----------------------
       # Terraform Apply
@@ -108,7 +130,7 @@ jobs:
           terraform output || echo "⚠️ No outputs found"
 
       # -----------------------
-      # Subnet Validation
+      # Validate Subnet Output
       # -----------------------
       - name: Validate Subnet Output
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -123,7 +145,7 @@ jobs:
           }
 
       # -----------------------
-      # Optional: Show VM Output
+      # Show VM Outputs
       # -----------------------
       - name: Show VM Outputs
         working-directory: ${{ env.TF_WORKING_DIR }}
