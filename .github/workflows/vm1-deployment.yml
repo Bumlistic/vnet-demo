@@ -6,7 +6,7 @@ on:
       - main
 
 env:
-  TF_WORKING_DIR: '.'            # Root directory for Terraform
+  TF_WORKING_DIR: '.'            # Root directory for your Terraform root .tf files
   TF_PLAN_FILE: 'tfplan.bin'     # Plan output filename
 
 jobs:
@@ -43,11 +43,20 @@ jobs:
           Write-Host "=== modules directory files ==="
           dir .\modules -Recurse
 
-      # **Install / setup Terraform CLI so `terraform` is available**
       - name: Setup Terraform CLI
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: '1.13.3'
+
+      - name: Confirm Terraform installed
+        shell: pwsh
+        run: |
+          Write-Host "=== Check terraform version in this shell ==="
+          terraform --version
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "❌ terraform not installed or not in PATH"
+            exit 1
+          }
 
       - name: Azure Login
         uses: azure/login@v1
@@ -60,8 +69,12 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
-          if (Test-Path .terraform) { Remove-Item -Recurse -Force .terraform }
-          if (Test-Path .terraform.lock.hcl) { Remove-Item .terraform.lock.hcl }
+          if (Test-Path .terraform) {
+            Remove-Item -Recurse -Force .terraform
+          }
+          if (Test-Path .terraform.lock.hcl) {
+            Remove-Item .terraform.lock.hcl
+          }
           Write-Host "✅ Cleaned Terraform cache."
 
       - name: Terraform Init
@@ -88,13 +101,6 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
-          Write-Host "=== Check terraform version in this shell ==="
-          terraform --version
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ terraform command not found in this shell"
-            exit 1
-          }
-
           Write-Host "=== Before plan: listing directory ==="
           dir .\ -Recurse
 
@@ -106,10 +112,10 @@ jobs:
           dir .\ -Recurse
 
           if (-not (Test-Path "${{ env.TF_PLAN_FILE }}")) {
-            Write-Error "❌ Plan file ${TF_PLAN_FILE} not found!"
+            Write-Error "❌ Plan file ${{ env.TF_PLAN_FILE }} not found!"
             exit 1
           } else {
-            Write-Host "✅ Plan file exists: ${TF_PLAN_FILE}"
+            Write-Host "✅ Plan file exists: ${{ env.TF_PLAN_FILE }}"
           }
 
       - name: Show Terraform Plan (text)
