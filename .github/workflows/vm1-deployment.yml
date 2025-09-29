@@ -6,8 +6,8 @@ on:
       - main
 
 env:
-  TF_WORKING_DIR: '.'            # Root directory containing Terraform root .tf files
-  TF_PLAN_FILE: 'tfplan.bin'     # Plan output file name
+  TF_WORKING_DIR: '.'            # Root directory for Terraform
+  TF_PLAN_FILE: 'tfplan.bin'     # Plan output filename
 
 jobs:
   terraform:
@@ -24,13 +24,13 @@ jobs:
       - name: Validate module directories
         shell: pwsh
         run: |
-          Write-Host "Checking modules/vnet & modules/windows-vm"
+          Write-Host "Checking modules/vnet & modules/windows-vm presence"
           if (-not (Test-Path "./modules/vnet")) {
-            Write-Error "❌ Module folder ./modules/vnet does not exist!"
+            Write-Error "❌ Module folder ./modules/vnet not found!"
             exit 1
           }
           if (-not (Test-Path "./modules/windows-vm")) {
-            Write-Error "❌ Module folder ./modules/windows-vm does not exist!"
+            Write-Error "❌ Module folder ./modules/windows-vm not found!"
             exit 1
           }
           Write-Host "✅ Module directories present."
@@ -38,13 +38,16 @@ jobs:
       - name: Debug file structure at start
         shell: pwsh
         run: |
-          Write-Host "=== Initial workspace listing ==="
+          Write-Host "=== Initial workspace files ==="
           dir .\ -Recurse
-          Write-Host "=== modules directory listing ==="
+          Write-Host "=== modules directory files ==="
           dir .\modules -Recurse
 
-      - name: Setup Terraform
+      - name: Setup Terraform CLI
         uses: hashicorp/setup-terraform@v2
+        # Optionally you can pin a version:
+        # with:
+        #   terraform_version: '1.8.5'
 
       - name: Azure Login
         uses: azure/login@v1
@@ -70,11 +73,11 @@ jobs:
         shell: pwsh
         run: terraform init -reconfigure
 
-      - name: Post-init modules check
+      - name: Post‑init modules check
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
-          Write-Host "=== After init: modules directory ==="
+          Write-Host "=== After init: modules folder ==="
           dir .\modules -Recurse
 
       - name: Terraform Format Check
@@ -85,25 +88,33 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform validate
 
-      - name: Terraform Plan (cmd mode) with logging
+      - name: Terraform Plan with logging
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: cmd
+        shell: pwsh
         run: |
-          echo === Before plan: listing directory ===
-          dir /s
-          terraform plan -out=%TF_PLAN_FILE% -var "admin_password=${{ secrets.ADMIN_PASSWORD }}" -var "subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-          if ERRORLEVEL NEQ 0 (
-            echo ❌ terraform plan failed with ERRORLEVEL %ERRORLEVEL%
-            exit /b 1
-          )
-          echo === After plan: listing directory ===
-          dir /s
-          if not exist %TF_PLAN_FILE% (
-            echo ❌ Plan file %TF_PLAN_FILE% not found!
-            exit /b 1
-          ) else (
-            echo ✅ Plan file exists: %TF_PLAN_FILE%
-          )
+          Write-Host "=== Check terraform version in this shell ==="
+          terraform --version
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "❌ terraform command not found in this shell"
+            exit 1
+          }
+
+          Write-Host "=== Before plan: listing directory ==="
+          dir .\ -Recurse
+
+          & terraform plan "-out=${{ env.TF_PLAN_FILE }}" "-var=admin_password=${{ secrets.ADMIN_PASSWORD }}" "-var=subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" "-input=false"
+          $planExit = $LASTEXITCODE
+          Write-Host "Terraform plan exit code: $planExit"
+
+          Write-Host "=== After plan: listing directory ==="
+          dir .\ -Recurse
+
+          if (-not (Test-Path "${{ env.TF_PLAN_FILE }}")) {
+            Write-Error "❌ Plan file ${TF_PLAN_FILE} not found!"
+            exit 1
+          } else {
+            Write-Host "✅ Plan file exists: ${TF_PLAN_FILE}"
+          }
 
       - name: Show Terraform Plan (text)
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -113,7 +124,7 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform show -json ${TF_PLAN_FILE} > plan.json
 
-      - name: Check plan.json exists & size
+      - name: Check plan.json exists & is non-empty
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
@@ -125,10 +136,10 @@ jobs:
             exit 1
           }
           if ($fi.Length -eq 0) {
-            Write-Error "❌ plan.json exists but is empty (0 bytes)!"
+            Write-Error "❌ plan.json is empty!"
             exit 1
           }
-          Write-Host "✅ plan.json is present and non‑empty (size = $($fi.Length) bytes)."
+          Write-Host "✅ plan.json present, size = $($fi.Length) bytes"
 
       - name: Upload plan.json artifact
         uses: actions/upload-artifact@v4
@@ -163,7 +174,7 @@ jobs:
         run: |
           $json = Get-Content -Raw plan.json | ConvertFrom-Json
           if ($null -eq $json.resource_changes -or $json.resource_changes.Count -eq 0) {
-            Write-Host "ℹ️ No changes detected; skipping apply."
+            Write-Host "ℹ️ No resource changes detected; skipping apply."
             exit 0
           } else {
             terraform apply -auto-approve ${TF_PLAN_FILE}
@@ -172,9 +183,9 @@ jobs:
       - name: Debug State & Outputs
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
-          echo --- Terraform State List ---
+          echo "--- Terraform State List ---"
           terraform state list || echo "(no state)"
-          echo --- Terraform Outputs ---
+          echo "--- Terraform Outputs ---"
           terraform output || echo "(no outputs)"
 
       - name: Dump All Outputs JSON
@@ -187,7 +198,7 @@ jobs:
             $obj = $raw | ConvertFrom-Json
             $obj | ConvertTo-Json -Depth 5
           } else {
-            Write-Host "No outputs returned (raw JSON empty)."
+            Write-Host "No outputs returned."
           }
 
       - name: Validate subnet_id output
@@ -197,7 +208,7 @@ jobs:
           $subnetId = terraform output -raw subnet_id 2>$null
           Write-Host "Subnet ID (raw): '$subnetId'"
           if ([string]::IsNullOrEmpty($subnetId)) {
-            Write-Error "❌ subnet_id output is empty — VNet module may not have been created or output defined incorrectly."
+            Write-Error "❌ subnet_id output is empty — likely module didn’t run or output not set."
             exit 1
           } else {
             Write-Host "✅ Subnet ID: $subnetId"
