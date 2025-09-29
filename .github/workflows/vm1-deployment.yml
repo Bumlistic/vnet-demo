@@ -6,8 +6,8 @@ on:
       - main
 
 env:
-  TF_WORKING_DIR: '.'            # Root directory for your Terraform root .tf files
-  TF_PLAN_FILE: 'tfplan.bin'     # Plan output filename
+  TF_WORKING_DIR: '.'            
+  TF_PLAN_FILE: 'tfplan.bin'     
 
 jobs:
   terraform:
@@ -20,6 +20,23 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Setup Terraform CLI
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: '1.13.3'
+          terraform_wrapper: true    # optional, may help ensure wrapper script is setup
+
+      - name: Confirm Terraform available
+        shell: pwsh
+        run: |
+          Write-Host "=== Check terraform version in this shell ==="
+          terraform --version
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "❌ terraform not installed or not in PATH"
+            exit 1
+          }
+          Write-Host "✅ Terraform version check passed"
 
       - name: Validate module directories
         shell: pwsh
@@ -43,21 +60,6 @@ jobs:
           Write-Host "=== modules directory files ==="
           dir .\modules -Recurse
 
-      - name: Setup Terraform CLI
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: '1.13.3'
-
-      - name: Confirm Terraform installed
-        shell: pwsh
-        run: |
-          Write-Host "=== Check terraform version in this shell ==="
-          terraform --version
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ terraform not installed or not in PATH"
-            exit 1
-          }
-
       - name: Azure Login
         uses: azure/login@v1
         with:
@@ -69,12 +71,8 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
-          if (Test-Path .terraform) {
-            Remove-Item -Recurse -Force .terraform
-          }
-          if (Test-Path .terraform.lock.hcl) {
-            Remove-Item .terraform.lock.hcl
-          }
+          if (Test-Path .terraform) { Remove-Item -Recurse -Force .terraform }
+          if (Test-Path .terraform.lock.hcl) { Remove-Item .terraform.lock.hcl }
           Write-Host "✅ Cleaned Terraform cache."
 
       - name: Terraform Init
@@ -184,11 +182,12 @@ jobs:
 
       - name: Debug State & Outputs
         working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
         run: |
-          echo "--- Terraform State List ---"
-          terraform state list || echo "(no state)"
-          echo "--- Terraform Outputs ---"
-          terraform output || echo "(no outputs)"
+          Write-Host "--- Terraform State List ---"
+          terraform state list || Write-Host "(no state)"
+          Write-Host "--- Terraform Outputs ---"
+          terraform output || Write-Host "(no outputs)"
 
       - name: Dump All Outputs JSON
         working-directory: ${{ env.TF_WORKING_DIR }}
