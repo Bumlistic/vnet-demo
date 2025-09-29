@@ -11,7 +11,7 @@ env:
 
 jobs:
   terraform:
-    name: Plan & Apply with Debug
+    name: Plan & Apply with Debug + PATH check
     runs-on: windows-latest
     permissions:
       contents: read
@@ -25,15 +25,19 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: '1.13.3'
-          terraform_wrapper: true    # optional, may help ensure wrapper script is setup
+          # terraform_wrapper: true   # you can try enabling/disabling wrapper to see effect
 
-      - name: Confirm Terraform available
+      - name: Confirm Terraform & PATH debug
         shell: pwsh
         run: |
-          Write-Host "=== Check terraform version in this shell ==="
+          Write-Host "=== PATH environment variable ==="
+          Write-Host $Env:Path
+          Write-Host "=== Check existence of terraform.exe via Get-Command ==="
+          Get-Command terraform -ErrorAction SilentlyContinue | Format-List
+          Write-Host "=== Check terraform version ==="
           terraform --version
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ terraform not installed or not in PATH"
+            Write-Error "❌ terraform not installed or not in PATH in this shell"
             exit 1
           }
           Write-Host "✅ Terraform version check passed"
@@ -80,7 +84,7 @@ jobs:
         shell: pwsh
         run: terraform init -reconfigure
 
-      - name: Post‑init modules check
+      - name: Post-init modules check
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
