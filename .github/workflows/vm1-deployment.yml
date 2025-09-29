@@ -6,8 +6,8 @@ on:
       - main
 
 env:
-  TF_WORKING_DIR: '.'            # The folder where your root .tf files are
-  TF_PLAN_FILE: 'tfplan.bin'     # Name of the plan file
+  TF_WORKING_DIR: '.'            # Root directory of your Terraform configuration
+  TF_PLAN_FILE: 'tfplan.bin'     # Name of the Terraform plan file
 
 jobs:
   terraform:
@@ -53,6 +53,13 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Configure Terraform Backend
+        shell: pwsh
+        run: |
+          terraform init -backend-config="storage_account_name=${{ secrets.AZURE_STORAGE_ACCOUNT_NAME }}" \
+                         -backend-config="container_name=${{ secrets.AZURE_CONTAINER_NAME }}" \
+                         -backend-config="key=${{ secrets.AZURE_STATE_KEY }}"
+
       - name: Clean Terraform cache
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
@@ -88,7 +95,10 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
-          & terraform plan "-out=${{ env.TF_PLAN_FILE }}" "-var=admin_password=${{ secrets.ADMIN_PASSWORD }}" "-var=subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" "-input=false"
+          & terraform plan "-out=${{ env.TF_PLAN_FILE }}" \
+                           "-var=admin_password=${{ secrets.ADMIN_PASSWORD }}" \
+                           "-var=subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+                           "-input=false"
 
       - name: Show Terraform Plan (text)
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -168,16 +178,6 @@ jobs:
             exit 1
           } else {
             Write-Host "✅ Subnet ID: $subnetId"
-          }
 
-      - name: Show VM Outputs
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
-        run: |
-          Write-Host "=== VM Outputs ==="
-          $vmId = terraform output -raw vm_id 2>$null
-          $vmPriv = terraform output -raw vm_private_ip 2>$null
-          $vmPub = terraform output -raw vm_public_ip 2>$null
-          Write-Host "VM ID: '$vmId'"
-          Write-Host "VM Private IP: '$vmPriv'"
-          Write-Host "VM Public IP: '$vmPub'"
+::contentReference[oaicite:0]{index=0}
+ 
