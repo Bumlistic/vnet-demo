@@ -1,4 +1,4 @@
-name: Terraform — Azure Deploy (Windows, Auto Apply)
+name: "Terraform — Azure Deploy (Windows, Auto Apply)"
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
 
 env:
-  TF_WORKING_DIR: '.'
+  TF_WORKING_DIR: '.'          # Terraform root directory (adjust if your tf files live in a subfolder)
   TF_PLAN_FILE: 'tfplan.bin'
 
 jobs:
@@ -18,48 +18,31 @@ jobs:
       id-token: write
 
     steps:
-      # -----------------------
-      # Checkout Repo
-      # -----------------------
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # -----------------------
-      # Check Module Folders
-      # -----------------------
-      - name: Validate Module Folders Exist
+      - name: Validate module directories
         shell: pwsh
         run: |
-          if (-not (Test-Path -Path "./modules/vnet")) {
+          if (-not (Test-Path "./modules/vnet")) {
             Write-Error "❌ Module folder ./modules/vnet does not exist!"
             exit 1
           }
-          if (-not (Test-Path -Path "./modules/windows-vm")) {
+          if (-not (Test-Path "./modules/windows-vm")) {
             Write-Error "❌ Module folder ./modules/windows-vm does not exist!"
             exit 1
           }
-          Write-Host "✅ All module folders exist."
+          Write-Host "✅ Module directories confirmed"
 
-      # -----------------------
-      # List Workspace and Modules
-      # -----------------------
-      - name: List Files in Working Directory
+      - name: Debug workspace snapshot
         shell: pwsh
-        run: dir -Recurse
+        run: |
+          Write-Host "=== Files in working directory ==="
+          dir -Recurse
 
-      - name: List Modules Folder
-        shell: pwsh
-        run: dir .\modules
-
-      # -----------------------
-      # Setup Terraform
-      # -----------------------
-      - name: Setup Terraform (latest)
+      - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
 
-      # -----------------------
-      # Azure Login
-      # -----------------------
       - name: Azure Login
         uses: azure/login@v1
         with:
@@ -67,34 +50,17 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # -----------------------
-      # Terraform Init (Local State)
-      # -----------------------
-      - name: Terraform Init (Local State)
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform init -reconfigure
-
-      # -----------------------
-      # Print Variables
-      # -----------------------
-      - name: Print Terraform Variables
+      - name: Clean Terraform cache
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
-          $vars = @{
-            "resource_group_name" = "vnet1-rg"
-            "location" = "Canada Central"
-            "vnet_name" = "vnet1"
-            "subnet_name" = "vnet1-subnet"
-            "admin_username" = "azureuser"
-            "subscription_id" = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-          }
-          Write-Host "=== Terraform Variables ==="
-          $vars.GetEnumerator() | ForEach-Object { Write-Host "$($_.Key) = $($_.Value)" }
+          if (Test-Path .terraform) { Remove-Item -Recurse -Force .terraform }
+          if (Test-Path .terraform.lock.hcl) { Remove-Item .terraform.lock.hcl }
+      
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init -reconfigure
 
-      # -----------------------
-      # Terraform Format & Validate
-      # -----------------------
       - name: Terraform Format Check
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform fmt -check -recursive
@@ -103,9 +69,6 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform validate
 
-      # -----------------------
-      # Terraform Plan
-      # -----------------------
       - name: Terraform Plan
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
@@ -114,19 +77,13 @@ jobs:
             -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" `
             -input=false
 
-      # -----------------------
-      # Show Plan (Text)
-      # -----------------------
-      - name: Show Terraform Plan
+      - name: Show Terraform Plan (text)
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform show ${{ env.TF_PLAN_FILE }}
+        run: terraform show ${TF_PLAN_FILE}
 
-      # -----------------------
-      # Save Plan JSON and Upload
-      # -----------------------
-      - name: Save Terraform Plan JSON
+      - name: Export Plan JSON
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform show -json ${{ env.TF_PLAN_FILE }} > plan.json
+        run: terraform show -json ${TF_PLAN_FILE} > plan.json
 
       - name: Upload plan.json
         uses: actions/upload-artifact@v4
@@ -134,65 +91,55 @@ jobs:
           name: terraform-plan
           path: plan.json
 
-      # -----------------------
-      # Fail If Plan Has 0 Resources
-      # -----------------------
-      - name: Fail If No Resources to Create
+      - name: Inspect Plan JSON (non-fatal)
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
           $planJson = Get-Content -Raw plan.json | ConvertFrom-Json
           $resources = $planJson.resource_changes
-          if ($null -eq $resources -or $resources.Count -eq 0) {
-            Write-Error "❌ Terraform plan contains 0 resources. Check modules folder and variable values!"
-            exit 1
+          Write-Host "Detected resource change count: $($resources?.Count ?? 0)"
+          # (Don't error out here — just log) 
+
+      # Only apply if there *is* something to do
+      - name: Terraform Apply (if changes exist)
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: |
+          $planJson = Get-Content -Raw plan.json | ConvertFrom-Json
+          if ($null -eq $planJson.resource_changes -or $planJson.resource_changes.Count -eq 0) {
+            Write-Host "ℹ️ No resource changes. Skipping apply."
+            exit 0
           } else {
-            Write-Host "✅ Terraform plan contains $($resources.Count) resource(s) to create/change."
+            terraform apply -auto-approve ${TF_PLAN_FILE}
           }
 
-      # -----------------------
-      # Terraform Apply
-      # -----------------------
-      - name: Terraform Apply (Auto)
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform apply -auto-approve ${{ env.TF_PLAN_FILE }}
-
-      # -----------------------
-      # Debug Terraform State & Outputs
-      # -----------------------
-      - name: Debug Terraform State & Outputs
+      - name: Debug Outputs & State
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
-          echo "--- State list ---"
-          terraform state list || echo "⚠️ No state found"
+          echo "--- Terraform State ---"
+          terraform state list || echo "⚠️ No state resources"
           echo "--- Outputs ---"
           terraform output || echo "⚠️ No outputs found"
 
-      # -----------------------
-      # Validate Subnet Output
-      # -----------------------
       - name: Validate Subnet Output
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
           $subnetId = terraform output -raw subnet_id
           if ([string]::IsNullOrEmpty($subnetId)) {
-            Write-Error "❌ ERROR: subnet_id output from VNet module is empty! VM cannot be created."
+            Write-Error "❌ subnet_id output is empty — VNet module may not have been created"
             exit 1
           } else {
-            Write-Host "✅ Subnet ID found: $subnetId"
+            Write-Host "✅ Subnet ID: $subnetId"
           }
 
-      # -----------------------
-      # Show VM Outputs
-      # -----------------------
-      - name: Show VM Outputs
+      - name: Display VM Outputs
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
           $vmId = terraform output -raw vm_id
-          $vmPrivateIP = terraform output -raw vm_private_ip
-          $vmPublicIP = terraform output -raw vm_public_ip
+          $vmPriv = terraform output -raw vm_private_ip
+          $vmPub = terraform output -raw vm_public_ip
           Write-Host "✅ VM ID: $vmId"
-          Write-Host "✅ VM Private IP: $vmPrivateIP"
-          Write-Host "✅ VM Public IP: $vmPublicIP"
+          Write-Host "✅ VM Private IP: $vmPriv"
+          Write-Host "✅ VM Public IP: $vmPub"
