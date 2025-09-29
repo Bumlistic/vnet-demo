@@ -1,4 +1,4 @@
-name: "Terraform — Azure Deploy (Debug & Apply)"
+name: "Terraform — Azure Deploy (Debug & Apply with Extra Logging)"
 
 on:
   push:
@@ -6,12 +6,12 @@ on:
       - main
 
 env:
-  TF_WORKING_DIR: '.'            # Root folder with your Terraform configs
-  TF_PLAN_FILE: 'tfplan.bin'     # Plan file name
+  TF_WORKING_DIR: '.'            # Root directory containing Terraform root .tf files
+  TF_PLAN_FILE: 'tfplan.bin'     # Name of the plan output file
 
 jobs:
   terraform:
-    name: Plan & Apply with Debug
+    name: Plan & Apply with Debug Logging
     runs-on: windows-latest
     permissions:
       contents: read
@@ -24,7 +24,7 @@ jobs:
       - name: Validate module directories
         shell: pwsh
         run: |
-          Write-Host "Checking modules/vnet & modules/windows-vm exist"
+          Write-Host "Checking modules/vnet & modules/windows-vm"
           if (-not (Test-Path "./modules/vnet")) {
             Write-Error "❌ Module folder ./modules/vnet does not exist!"
             exit 1
@@ -33,14 +33,14 @@ jobs:
             Write-Error "❌ Module folder ./modules/windows-vm does not exist!"
             exit 1
           }
-          Write-Host "✅ Module directories found."
+          Write-Host "✅ Module directories present."
 
-      - name: Debug file structure
+      - name: Debug file structure at start
         shell: pwsh
         run: |
-          Write-Host "=== Root directory listing ==="
+          Write-Host "=== Initial workspace directory listing ==="
           dir .\ -Recurse
-          Write-Host "=== Modules directory listing ==="
+          Write-Host "=== modules directory listing ==="
           dir .\modules -Recurse
 
       - name: Setup Terraform
@@ -68,14 +68,13 @@ jobs:
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
-        run: |
-          terraform init -reconfigure
+        run: terraform init -reconfigure
 
-      - name: Post-init modules check
+      - name: Post‑init modules directory listing
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
-          Write-Host "=== Modules directory after init ==="
+          Write-Host "=== After init: modules directory ==="
           dir .\modules -Recurse
 
       - name: Terraform Format Check
@@ -86,21 +85,22 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform validate
 
-      - name: Terraform Plan
+      - name: Terraform Plan with logging
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
+          Write-Host "=== Before plan: listing directory ==="
+          dir .\ -Recurse
           & terraform plan "-out=${{ env.TF_PLAN_FILE }}" "-var=admin_password=${{ secrets.ADMIN_PASSWORD }}" "-var=subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" "-input=false"
-
-      - name: Check plan file exists
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
-        run: |
+          $last = $LASTEXITCODE
+          Write-Host "Terraform plan exit code: $last"
           Write-Host "=== After plan: listing directory ==="
-          dir .\ -Filter ${{ env.TF_PLAN_FILE }} -Recurse
+          dir .\ -Recurse
           if (-not (Test-Path ${{ env.TF_PLAN_FILE }})) {
-            Write-Error "❌ Plan file ${TF_PLAN_FILE} not found!"
+            Write-Error "❌ Plan file ${{ env.TF_PLAN_FILE }} not found!"
             exit 1
+          } else {
+            Write-Host "✅ Plan file exists: ${{ env.TF_PLAN_FILE }}"
           }
 
       - name: Show Terraform Plan (text)
@@ -111,7 +111,7 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform show -json ${TF_PLAN_FILE} > plan.json
 
-      - name: Check plan.json exists & size
+      - name: Check plan.json existence & size
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
@@ -126,9 +126,9 @@ jobs:
             Write-Error "❌ plan.json exists but is empty (0 bytes)!"
             exit 1
           }
-          Write-Host "✅ plan.json exists and is non-empty (size: $($fi.Length) bytes)."
+          Write-Host "✅ plan.json is present and non‑empty (size = $($fi.Length) bytes)."
 
-      - name: Upload plan.json
+      - name: Upload plan.json artifact
         uses: actions/upload-artifact@v4
         with:
           name: terraform-plan-json
