@@ -1,4 +1,4 @@
-name: "Terraform — Azure Deploy (Debug & Apply)"
+name: "Terraform — Azure Deploy (Debug & Apply + PATH Debug)"
 
 on:
   push:
@@ -11,7 +11,7 @@ env:
 
 jobs:
   terraform:
-    name: Plan & Apply with Debug + PATH check
+    name: Plan & Apply with PATH Debug
     runs-on: windows-latest
     permissions:
       contents: read
@@ -25,22 +25,35 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: '1.13.3'
-          # terraform_wrapper: true   # you can try enabling/disabling wrapper to see effect
+          terraform_wrapper: false   # disable wrapper to simplify debugging
 
-      - name: Confirm Terraform & PATH debug
+      - name: Terraform & PATH Debug
         shell: pwsh
         run: |
           Write-Host "=== PATH environment variable ==="
           Write-Host $Env:Path
-          Write-Host "=== Check existence of terraform.exe via Get-Command ==="
-          Get-Command terraform -ErrorAction SilentlyContinue | Format-List
-          Write-Host "=== Check terraform version ==="
-          terraform --version
+
+          Write-Host "=== Get-Command terraform output ==="
+          Get-Command terraform -ErrorAction SilentlyContinue | Format-List *
+
+          Write-Host "=== ExecutionPolicy ==="
+          Get-ExecutionPolicy | Write-Host
+
+          Write-Host "=== Attempt to run terraform.exe directly ==="
+          & terraform.exe --version
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ terraform not installed or not in PATH in this shell"
+            Write-Error "❌ terraform.exe failed"
             exit 1
           }
-          Write-Host "✅ Terraform version check passed"
+          Write-Host "✅ terraform.exe ran successfully"
+
+          Write-Host "=== Attempt to run terraform (bare) ==="
+          terraform --version
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "❌ terraform (bare) failed"
+            exit 1
+          }
+          Write-Host "✅ terraform (bare) ran successfully"
 
       - name: Validate module directories
         shell: pwsh
