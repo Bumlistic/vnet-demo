@@ -1,4 +1,4 @@
-name: "Terraform — Azure Deploy (Debug & Apply + PATH Debug)"
+name: "Terraform — Azure Deploy (Debug & Apply + Auto‑Fmt)"
 
 on:
   push:
@@ -11,7 +11,7 @@ env:
 
 jobs:
   terraform:
-    name: Plan & Apply with PATH Debug
+    name: Plan & Apply with Auto‑Fmt & Debug
     runs-on: windows-latest
     permissions:
       contents: read
@@ -25,7 +25,7 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: '1.13.3'
-          terraform_wrapper: false   # disable wrapper to simplify debugging
+          terraform_wrapper: false
 
       - name: Terraform & PATH Debug
         shell: pwsh
@@ -77,6 +77,18 @@ jobs:
           Write-Host "=== modules directory files ==="
           dir .\modules -Recurse
 
+      - name: Auto‑format Terraform files
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: terraform fmt -recursive
+
+      - name: Terraform fmt check
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: |
+          Write-Host "=== Checking formatting ==="
+          terraform fmt -check -recursive
+          
       - name: Azure Login
         uses: azure/login@v1
         with:
@@ -97,16 +109,12 @@ jobs:
         shell: pwsh
         run: terraform init -reconfigure
 
-      - name: Post-init modules check
+      - name: Post‑init modules check
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
           Write-Host "=== After init: modules folder ==="
           dir .\modules -Recurse
-
-      - name: Terraform Format Check
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform fmt -check -recursive
 
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
