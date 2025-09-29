@@ -43,11 +43,11 @@ jobs:
           Write-Host "=== modules directory files ==="
           dir .\modules -Recurse
 
+      # **Install / setup Terraform CLI so `terraform` is available**
       - name: Setup Terraform CLI
         uses: hashicorp/setup-terraform@v2
-        # Optionally you can pin a version:
-        # with:
-        #   terraform_version: '1.8.5'
+        with:
+          terraform_version: '1.13.3'
 
       - name: Azure Login
         uses: azure/login@v1
@@ -60,12 +60,8 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
-          if (Test-Path .terraform) {
-            Remove-Item -Recurse -Force .terraform
-          }
-          if (Test-Path .terraform.lock.hcl) {
-            Remove-Item .terraform.lock.hcl
-          }
+          if (Test-Path .terraform) { Remove-Item -Recurse -Force .terraform }
+          if (Test-Path .terraform.lock.hcl) { Remove-Item .terraform.lock.hcl }
           Write-Host "✅ Cleaned Terraform cache."
 
       - name: Terraform Init
