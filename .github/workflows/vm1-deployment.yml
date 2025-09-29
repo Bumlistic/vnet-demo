@@ -1,4 +1,4 @@
-name: "Terraform — Azure Deploy (Debug & Apply with Extra Logging)"
+name: "Terraform — Azure Deploy (Debug & Apply)"
 
 on:
   push:
@@ -7,11 +7,11 @@ on:
 
 env:
   TF_WORKING_DIR: '.'            # Root directory containing Terraform root .tf files
-  TF_PLAN_FILE: 'tfplan.bin'     # Name of the plan output file
+  TF_PLAN_FILE: 'tfplan.bin'     # Plan output file name
 
 jobs:
   terraform:
-    name: Plan & Apply with Debug Logging
+    name: Plan & Apply with Debug
     runs-on: windows-latest
     permissions:
       contents: read
@@ -38,7 +38,7 @@ jobs:
       - name: Debug file structure at start
         shell: pwsh
         run: |
-          Write-Host "=== Initial workspace directory listing ==="
+          Write-Host "=== Initial workspace listing ==="
           dir .\ -Recurse
           Write-Host "=== modules directory listing ==="
           dir .\modules -Recurse
@@ -70,7 +70,7 @@ jobs:
         shell: pwsh
         run: terraform init -reconfigure
 
-      - name: Post‑init modules directory listing
+      - name: Post-init modules check
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
@@ -85,23 +85,25 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform validate
 
-      - name: Terraform Plan with logging
+      - name: Terraform Plan (cmd mode) with logging
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
+        shell: cmd
         run: |
-          Write-Host "=== Before plan: listing directory ==="
-          dir .\ -Recurse
-          & terraform plan "-out=${{ env.TF_PLAN_FILE }}" "-var=admin_password=${{ secrets.ADMIN_PASSWORD }}" "-var=subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" "-input=false"
-          $last = $LASTEXITCODE
-          Write-Host "Terraform plan exit code: $last"
-          Write-Host "=== After plan: listing directory ==="
-          dir .\ -Recurse
-          if (-not (Test-Path ${{ env.TF_PLAN_FILE }})) {
-            Write-Error "❌ Plan file ${{ env.TF_PLAN_FILE }} not found!"
-            exit 1
-          } else {
-            Write-Host "✅ Plan file exists: ${{ env.TF_PLAN_FILE }}"
-          }
+          echo === Before plan: listing directory ===
+          dir /s
+          terraform plan -out=%TF_PLAN_FILE% -var "admin_password=${{ secrets.ADMIN_PASSWORD }}" -var "subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+          if ERRORLEVEL NEQ 0 (
+            echo ❌ terraform plan failed with ERRORLEVEL %ERRORLEVEL%
+            exit /b 1
+          )
+          echo === After plan: listing directory ===
+          dir /s
+          if not exist %TF_PLAN_FILE% (
+            echo ❌ Plan file %TF_PLAN_FILE% not found!
+            exit /b 1
+          ) else (
+            echo ✅ Plan file exists: %TF_PLAN_FILE%
+          )
 
       - name: Show Terraform Plan (text)
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -111,7 +113,7 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform show -json ${TF_PLAN_FILE} > plan.json
 
-      - name: Check plan.json existence & size
+      - name: Check plan.json exists & size
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
@@ -161,7 +163,7 @@ jobs:
         run: |
           $json = Get-Content -Raw plan.json | ConvertFrom-Json
           if ($null -eq $json.resource_changes -or $json.resource_changes.Count -eq 0) {
-            Write-Host "ℹ️ No resource changes detected; skipping apply."
+            Write-Host "ℹ️ No changes detected; skipping apply."
             exit 0
           } else {
             terraform apply -auto-approve ${TF_PLAN_FILE}
@@ -170,9 +172,9 @@ jobs:
       - name: Debug State & Outputs
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
-          echo "--- Terraform State List ---"
+          echo --- Terraform State List ---
           terraform state list || echo "(no state)"
-          echo "--- Terraform Outputs ---"
+          echo --- Terraform Outputs ---
           terraform output || echo "(no outputs)"
 
       - name: Dump All Outputs JSON
