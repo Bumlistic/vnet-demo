@@ -177,7 +177,4 @@ jobs:
             Write-Error "❌ subnet_id output is empty — VNet module may not have been created or output defined incorrectly."
             exit 1
           } else {
-            Write-Host "✅ Subnet ID: $subnetId"
-
-::contentReference[oaicite:0]{index=0}
- 
+            Write-Host "✅ Subnet ID: $subnetId" 
