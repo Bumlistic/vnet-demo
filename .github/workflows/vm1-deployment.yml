@@ -44,10 +44,12 @@ jobs:
       # List Workspace and Modules
       # -----------------------
       - name: List Files in Working Directory
+        shell: pwsh
         run: dir -Recurse
 
       - name: List Modules Folder
-        run: dir .\modules /s
+        shell: pwsh
+        run: dir .\modules
 
       # -----------------------
       # Setup Terraform
