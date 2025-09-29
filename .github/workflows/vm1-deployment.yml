@@ -180,5 +180,4 @@ jobs:
             Write-Host "✅ Subnet ID: $subnetId"
           }
 
-      - name: Show VM Outputs
        
