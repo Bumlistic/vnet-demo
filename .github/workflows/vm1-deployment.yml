@@ -6,8 +6,8 @@ on:
       - main
 
 env:
-  TF_WORKING_DIR: '.'            # The folder where your root .tf files are
-  TF_PLAN_FILE: 'tfplan.bin'     # Name of the plan file
+  TF_WORKING_DIR: '.'            # Root folder with your Terraform configs
+  TF_PLAN_FILE: 'tfplan.bin'     # Plan file name
 
 jobs:
   terraform:
@@ -24,7 +24,7 @@ jobs:
       - name: Validate module directories
         shell: pwsh
         run: |
-          Write-Host "Checking modules/vnet and modules/windows-vm existence"
+          Write-Host "Checking modules/vnet & modules/windows-vm exist"
           if (-not (Test-Path "./modules/vnet")) {
             Write-Error "❌ Module folder ./modules/vnet does not exist!"
             exit 1
@@ -69,17 +69,13 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
-          terraform init `
-            -backend-config="resource_group_name=${{ secrets.AZURE_RESOURCE_GROUP }}" `
-            -backend-config="storage_account_name=${{ secrets.AZURE_STORAGE_ACCOUNT }}" `
-            -backend-config="container_name=${{ secrets.AZURE_CONTAINER_NAME }}" `
-            -backend-config="key=${{ secrets.AZURE_STATE_KEY }}"
+          terraform init -reconfigure
 
-      - name: Post-init modules folder check
+      - name: Post-init modules check
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
-          Write-Host "=== modules directory after init ==="
+          Write-Host "=== Modules directory after init ==="
           dir .\modules -Recurse
 
       - name: Terraform Format Check
@@ -94,11 +90,18 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
-          terraform plan `
-            -out=${{ env.TF_PLAN_FILE }} `
-            -var="admin_password=${{ secrets.ADMIN_PASSWORD }}" `
-            -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" `
-            -input=false
+          & terraform plan "-out=${{ env.TF_PLAN_FILE }}" "-var=admin_password=${{ secrets.ADMIN_PASSWORD }}" "-var=subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" "-input=false"
+
+      - name: Check plan file exists
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: |
+          Write-Host "=== After plan: listing directory ==="
+          dir .\ -Filter ${{ env.TF_PLAN_FILE }} -Recurse
+          if (-not (Test-Path ${{ env.TF_PLAN_FILE }})) {
+            Write-Error "❌ Plan file ${TF_PLAN_FILE} not found!"
+            exit 1
+          }
 
       - name: Show Terraform Plan (text)
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -108,11 +111,29 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform show -json ${TF_PLAN_FILE} > plan.json
 
+      - name: Check plan.json exists & size
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: |
+          Write-Host "=== After show JSON: listing plan.json ==="
+          dir .\ -Filter plan.json -Recurse
+          $fi = Get-Item -Path plan.json -ErrorAction SilentlyContinue
+          if ($null -eq $fi) {
+            Write-Error "❌ plan.json not found!"
+            exit 1
+          }
+          if ($fi.Length -eq 0) {
+            Write-Error "❌ plan.json exists but is empty (0 bytes)!"
+            exit 1
+          }
+          Write-Host "✅ plan.json exists and is non-empty (size: $($fi.Length) bytes)."
+
       - name: Upload plan.json
         uses: actions/upload-artifact@v4
         with:
           name: terraform-plan-json
           path: plan.json
+          if-no-files-found: error
 
       - name: Inspect Plan JSON Summary
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -180,4 +201,14 @@ jobs:
             Write-Host "✅ Subnet ID: $subnetId"
           }
 
-       
+      - name: Show VM Outputs
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: |
+          Write-Host "=== VM Outputs ==="
+          $vmId = terraform output -raw vm_id 2>$null
+          $vmPriv = terraform output -raw vm_private_ip 2>$null
+          $vmPub = terraform output -raw vm_public_ip 2>$null
+          Write-Host "VM ID: '$vmId'"
+          Write-Host "VM Private IP: '$vmPriv'"
+          Write-Host "VM Public IP: '$vmPub'"
