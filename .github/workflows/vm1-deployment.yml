@@ -6,8 +6,8 @@ on:
       - main
 
 env:
-  TF_WORKING_DIR: '.'           # Root directory where your Terraform .tf files are
-  TF_PLAN_FILE: 'tfplan.bin'
+  TF_WORKING_DIR: '.'            # The folder where your root .tf files are
+  TF_PLAN_FILE: 'tfplan.bin'     # Name of the plan file
 
 jobs:
   terraform:
@@ -69,7 +69,7 @@ jobs:
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform init -reconfigure
 
-      - name: Post-init modules check
+      - name: Post-init modules folder check
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
@@ -139,9 +139,9 @@ jobs:
       - name: Debug State & Outputs
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: |
-          echo "--- State List ---"
+          echo "--- Terraform State List ---"
           terraform state list || echo "(no state)"
-          echo "--- Outputs ---"
+          echo "--- Terraform Outputs ---"
           terraform output || echo "(no outputs)"
 
       - name: Dump All Outputs JSON
