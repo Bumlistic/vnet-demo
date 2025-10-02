@@ -1,7 +1,7 @@
 name: "Terraform — Azure Destroy (OIDC Backend)"
 
 on:
-  workflow_dispatch:   # manual trigger only (to avoid accidental destroys)
+  workflow_dispatch:   # manual trigger only
 
 env:
   TF_WORKING_DIR: '.'
@@ -48,6 +48,14 @@ jobs:
             -backend-config="storage_account_name=${{ secrets.TF_BACKEND_STORAGE_ACCOUNT }}" `
             -backend-config="container_name=${{ secrets.TF_BACKEND_CONTAINER }}" `
             -backend-config="key=${{ secrets.TF_BACKEND_KEY }}"
+
+      # 👇 Added step to confirm what state Terraform sees
+      - name: Show Current State
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: |
+          Write-Host '--- Terraform State List ---'
+          terraform state list || Write-Host '(no state)'
 
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
