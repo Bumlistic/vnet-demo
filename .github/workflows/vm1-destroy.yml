@@ -1,19 +1,19 @@
 name: "Terraform — Azure Destroy (OIDC Backend)"
 
 on:
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:   # manual trigger only (to avoid accidental destroys)
 
 env:
   TF_WORKING_DIR: '.'
+  TF_PLAN_FILE: 'tfplan-destroy.bin'
 
 jobs:
-  terraform:
-    name: Destroy
+  terraform-destroy:
+    name: Plan & Destroy
     runs-on: windows-latest
-
     permissions:
       contents: read
-      id-token: write     # Required for OIDC
+      id-token: write     # required for OIDC
 
     env:
       ARM_USE_OIDC: true
@@ -54,24 +54,22 @@ jobs:
         shell: pwsh
         run: terraform validate
 
-      - name: Debug — List Terraform State
+      - name: Terraform Plan Destroy (save planfile)
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
-          Write-Host '--- Terraform State List ---'
-          terraform state list || Write-Host '(no state found)'
-
-      - name: Terraform Destroy
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
-        run: |
-          terraform destroy -auto-approve `
+          terraform plan -destroy `
+            -out="${{ env.TF_PLAN_FILE }}" `
+            -input=false `
             -var="admin_password=${{ secrets.ADMIN_PASSWORD }}" `
             -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
 
-      - name: Confirm State After Destroy
+      - name: Show Destroy Plan
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
-        run: |
-          Write-Host '--- Terraform State After Destroy ---'
-          terraform state list || Write-Host '(no resources left)'
+        run: terraform show "${{ env.TF_PLAN_FILE }}"
+
+      - name: Terraform Destroy Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: terraform apply -auto-approve "${{ env.TF_PLAN_FILE }}"
