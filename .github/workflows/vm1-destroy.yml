@@ -1,19 +1,19 @@
-name: Terraform — Azure Destroy (OIDC Backend)
+name: "Terraform — Azure Destroy (OIDC Backend)"
 
 on:
-  workflow_dispatch:  # Only runs when manually triggered
+  workflow_dispatch:  # Manual trigger
 
 env:
   TF_WORKING_DIR: '.'
 
 jobs:
   terraform:
-    name: Terraform Destroy
+    name: Destroy
     runs-on: windows-latest
 
     permissions:
       contents: read
-      id-token: write  # Required for OIDC auth
+      id-token: write     # Required for OIDC
 
     env:
       ARM_USE_OIDC: true
@@ -22,7 +22,7 @@ jobs:
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Terraform
@@ -38,7 +38,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Terraform Init (Remote Backend)
+      - name: Terraform Init (remote backend via AAD)
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
@@ -49,10 +49,17 @@ jobs:
             -backend-config="container_name=${{ secrets.TF_BACKEND_CONTAINER }}" `
             -backend-config="key=${{ secrets.TF_BACKEND_KEY }}"
 
-      - name: Debug – Show Terraform State
+      - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
-        run: terraform state list
+        run: terraform validate
+
+      - name: Debug — List Terraform State
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: |
+          Write-Host '--- Terraform State List ---'
+          terraform state list || Write-Host '(no state found)'
 
       - name: Terraform Destroy
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -61,3 +68,10 @@ jobs:
           terraform destroy -auto-approve `
             -var="admin_password=${{ secrets.ADMIN_PASSWORD }}" `
             -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
+      - name: Confirm State After Destroy
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: |
+          Write-Host '--- Terraform State After Destroy ---'
+          terraform state list || Write-Host '(no resources left)'
