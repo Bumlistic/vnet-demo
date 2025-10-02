@@ -1,0 +1,64 @@
+name: Terraform — Azure Destroy (OIDC Backend)
+
+on:
+  workflow_dispatch:  # Manual trigger from GitHub UI
+
+env:
+  TF_WORKING_DIR: '.'
+
+jobs:
+  terraform-destroy:
+    name: Terraform Destroy
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write # required for OIDC
+
+    env:
+      ARM_USE_OIDC: true
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: '1.13.3'
+          terraform_wrapper: false
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: |
+          terraform init -reconfigure `
+            -backend-config="use_azuread_auth=true" `
+            -backend-config="resource_group_name=${{ secrets.TF_BACKEND_RESOURCE_GROUP }}" `
+            -backend-config="storage_account_name=${{ secrets.TF_BACKEND_STORAGE_ACCOUNT }}" `
+            -backend-config="container_name=${{ secrets.TF_BACKEND_CONTAINER }}" `
+            -backend-config="key=${{ secrets.TF_BACKEND_KEY }}"
+
+      - name: Terraform Destroy
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: |
+          terraform destroy -auto-approve `
+            -var="admin_password=${{ secrets.ADMIN_PASSWORD }}" `
+            -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
+      - name: Show Post-Destroy State
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: |
+          Write-Host '--- Terraform State (Post-Destroy) ---'
+          terraform state list || Write-Host '(state already removed)'
