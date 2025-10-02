@@ -83,7 +83,7 @@ jobs:
       - name: Terraform Apply Destroy
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
-        run: terraform apply -auto-approve "${{ env.TF_PLAN_FILE }}" -var="admin_password=${{ secrets.ADMIN_PASSWORD }}"
+        run: terraform apply -auto-approve "${{ env.TF_PLAN_FILE }}"
 
       - name: Show State & Outputs
         working-directory: ${{ env.TF_WORKING_DIR }}
