@@ -1,7 +1,7 @@
 name: "Terraform — Azure Destroy (OIDC Backend)"
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:   # manual trigger only
 
 env:
   TF_WORKING_DIR: '.'
@@ -47,14 +47,16 @@ jobs:
             -backend-config="resource_group_name=${{ secrets.TF_BACKEND_RESOURCE_GROUP }}" `
             -backend-config="storage_account_name=${{ secrets.TF_BACKEND_STORAGE_ACCOUNT }}" `
             -backend-config="container_name=${{ secrets.TF_BACKEND_CONTAINER }}" `
-            -backend-config="key=${{ secrets.TF_BACKEND_KEY }}"  # <- points to vnet1.tfstate
+            -backend-config="key=vnet1.tfstate"  # must match deploy
 
-      - name: Show Current State
+      - name: Terraform Workspace & State Debug
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
+          Write-Host '--- Terraform Workspace ---'
+          terraform workspace show
           Write-Host '--- Terraform State List ---'
-          terraform state list || Write-Host '(no state)'
+          terraform state list || Write-Host '(no state found)'
 
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
