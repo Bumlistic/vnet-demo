@@ -38,11 +38,6 @@ resource "azurerm_network_security_group" "vnet1_nsg" {
     source_address_prefix      = "*"
     destination_address_prefix = "*"
   }
-
-  # Ensure NSG is destroyed after NIC association
-  depends_on = [
-    azurerm_network_interface_security_group_association.vnet1_nic_nsg
-  ]
 }
 
 # NSG association with NIC
