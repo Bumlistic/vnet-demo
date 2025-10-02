@@ -49,6 +49,11 @@ resource "azurerm_network_security_group" "vnet1_nsg" {
 resource "azurerm_network_interface_security_group_association" "vnet1_nic_nsg" {
   network_interface_id      = azurerm_network_interface.vnet1_network_interface.id
   network_security_group_id = azurerm_network_security_group.vnet1_nsg.id
+
+  depends_on = [
+    azurerm_network_interface.vnet1_network_interface,
+    azurerm_network_security_group.vnet1_nsg
+  ]
 }
 
 # Windows VM
