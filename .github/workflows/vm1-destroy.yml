@@ -1,18 +1,19 @@
 name: Terraform — Azure Destroy (OIDC Backend)
 
 on:
-  workflow_dispatch:  # Manual trigger from GitHub UI
+  workflow_dispatch:  # Only runs when manually triggered
 
 env:
   TF_WORKING_DIR: '.'
 
 jobs:
-  terraform-destroy:
+  terraform:
     name: Terraform Destroy
     runs-on: windows-latest
+
     permissions:
       contents: read
-      id-token: write # required for OIDC
+      id-token: write  # Required for OIDC auth
 
     env:
       ARM_USE_OIDC: true
@@ -21,7 +22,7 @@ jobs:
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Setup Terraform
@@ -37,7 +38,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Terraform Init
+      - name: Terraform Init (Remote Backend)
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
         run: |
@@ -48,6 +49,11 @@ jobs:
             -backend-config="container_name=${{ secrets.TF_BACKEND_CONTAINER }}" `
             -backend-config="key=${{ secrets.TF_BACKEND_KEY }}"
 
+      - name: Debug – Show Terraform State
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: pwsh
+        run: terraform state list
+
       - name: Terraform Destroy
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
@@ -55,10 +61,3 @@ jobs:
           terraform destroy -auto-approve `
             -var="admin_password=${{ secrets.ADMIN_PASSWORD }}" `
             -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-
-      - name: Show Post-Destroy State
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
-        run: |
-          Write-Host '--- Terraform State (Post-Destroy) ---'
-          terraform state list || Write-Host '(state already removed)'
