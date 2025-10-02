@@ -60,7 +60,8 @@ jobs:
         run: |
           terraform plan -destroy `
             -out="${{ env.TF_PLAN_FILE }}" `
-            -input=false
+            -input=false `
+            -var="admin_password=${{ secrets.ADMIN_PASSWORD }}"
 
       - name: Show Destroy Plan (text)
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -82,7 +83,7 @@ jobs:
       - name: Terraform Apply Destroy
         working-directory: ${{ env.TF_WORKING_DIR }}
         shell: pwsh
-        run: terraform apply -auto-approve "${{ env.TF_PLAN_FILE }}"
+        run: terraform apply -auto-approve "${{ env.TF_PLAN_FILE }}" -var="admin_password=${{ secrets.ADMIN_PASSWORD }}"
 
       - name: Show State & Outputs
         working-directory: ${{ env.TF_WORKING_DIR }}
