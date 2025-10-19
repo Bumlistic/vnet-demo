@@ -1,7 +1,7 @@
 name: "Terraform — Azure Destroy (OIDC Backend)"
 
 on:
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:  # Manual trigger only
 
 env:
   TF_WORKING_DIR: '.'
@@ -10,7 +10,7 @@ env:
 jobs:
   terraform-destroy:
     name: Plan & Destroy
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write  # Required for OIDC
@@ -40,37 +40,32 @@ jobs:
 
       - name: Terraform Init (remote backend via AAD)
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
         run: |
-          terraform init -reconfigure `
-            -backend-config="use_azuread_auth=true" `
-            -backend-config="resource_group_name=${{ secrets.TF_BACKEND_RESOURCE_GROUP }}" `
-            -backend-config="storage_account_name=${{ secrets.TF_BACKEND_STORAGE_ACCOUNT }}" `
-            -backend-config="container_name=${{ secrets.TF_BACKEND_CONTAINER }}" `
+          terraform init -reconfigure \
+            -backend-config="use_azuread_auth=true" \
+            -backend-config="resource_group_name=${{ secrets.TF_BACKEND_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.TF_BACKEND_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.TF_BACKEND_CONTAINER }}" \
             -backend-config="key=vnet1.tfstate"
 
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
         run: terraform validate
 
       - name: Terraform Plan Destroy (save plan)
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
         run: |
-          terraform plan -destroy `
-            -out="${{ env.TF_PLAN_FILE }}" `
-            -input=false `
+          terraform plan -destroy \
+            -out="${{ env.TF_PLAN_FILE }}" \
+            -input=false \
             -var="admin_password=${{ secrets.ADMIN_PASSWORD }}"
 
       - name: Show Destroy Plan (text)
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
         run: terraform show "${{ env.TF_PLAN_FILE }}"
 
       - name: Export Destroy Plan JSON (artifact)
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
         run: terraform show -json "${{ env.TF_PLAN_FILE }}" > destroy-plan.json
 
       - name: Upload destroy plan JSON
@@ -82,16 +77,14 @@ jobs:
 
       - name: Terraform Apply Destroy
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
         run: terraform apply -auto-approve "${{ env.TF_PLAN_FILE }}"
 
       - name: Show State & Outputs
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
         run: |
-          Write-Host '--- Terraform State List ---'
-          terraform state list || Write-Host '(no state)'
-          Write-Host '--- Terraform Outputs ---'
-          terraform output || Write-Host '(no outputs)'
-          Write-Host '--- Outputs (JSON) ---'
+          echo '--- Terraform State List ---'
+          terraform state list || echo '(no state)'
+          echo '--- Terraform Outputs ---'
+          terraform output || echo '(no outputs)'
+          echo '--- Outputs (JSON) ---'
           terraform output -json
