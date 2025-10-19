@@ -11,12 +11,11 @@ env:
 jobs:
   terraform:
     name: Plan & Apply
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write     # required for OIDC
+      id-token: write   # required for OIDC
 
-    # Make ARM_* available to Terraform provider and backend
     env:
       ARM_USE_OIDC: true
       ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -42,43 +41,37 @@ jobs:
 
       - name: Auto-format Terraform
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
         run: terraform fmt -recursive
 
       - name: Terraform Init (remote backend via AAD)
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
         run: |
-          terraform init -reconfigure `
-            -backend-config="use_azuread_auth=true" `
-            -backend-config="resource_group_name=${{ secrets.TF_BACKEND_RESOURCE_GROUP }}" `
-            -backend-config="storage_account_name=${{ secrets.TF_BACKEND_STORAGE_ACCOUNT }}" `
-            -backend-config="container_name=${{ secrets.TF_BACKEND_CONTAINER }}" `
+          terraform init -reconfigure \
+            -backend-config="use_azuread_auth=true" \
+            -backend-config="resource_group_name=${{ secrets.TF_BACKEND_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ secrets.TF_BACKEND_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ secrets.TF_BACKEND_CONTAINER }}" \
             -backend-config="key=${{ secrets.TF_BACKEND_KEY }}"
 
       - name: Terraform Validate
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
         run: terraform validate
 
       - name: Terraform Plan (save planfile)
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
         run: |
-          terraform plan `
-            -out="${{ env.TF_PLAN_FILE }}" `
-            -input=false `
-            -var="admin_password=${{ secrets.ADMIN_PASSWORD }}" `
+          terraform plan \
+            -out="${{ env.TF_PLAN_FILE }}" \
+            -input=false \
+            -var="admin_password=${{ secrets.ADMIN_PASSWORD }}" \
             -var="subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
 
       - name: Show Terraform Plan (text)
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
         run: terraform show "${{ env.TF_PLAN_FILE }}"
 
       - name: Export Plan JSON (artifact)
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
         run: terraform show -json "${{ env.TF_PLAN_FILE }}" > plan.json
 
       - name: Upload plan.json
@@ -88,19 +81,16 @@ jobs:
           path: plan.json
           if-no-files-found: error
 
-      # Always apply the saved plan while we’re troubleshooting
       - name: Terraform Apply
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
         run: terraform apply -auto-approve "${{ env.TF_PLAN_FILE }}"
 
       - name: Show State & Outputs
         working-directory: ${{ env.TF_WORKING_DIR }}
-        shell: pwsh
         run: |
-          Write-Host '--- Terraform State List ---'
-          terraform state list || Write-Host '(no state)'
-          Write-Host '--- Terraform Outputs ---'
-          terraform output || Write-Host '(no outputs)'
-          Write-Host '--- Outputs (JSON) ---'
+          echo '--- Terraform State List ---'
+          terraform state list || echo '(no state)'
+          echo '--- Terraform Outputs ---'
+          terraform output || echo '(no outputs)'
+          echo '--- Outputs (JSON) ---'
           terraform output -json
