@@ -1,4 +1,4 @@
-name: "Terraform — Deploy RG & Storage"
+name: "Terraform Deploy RG & Storage"
 
 # Manual trigger only
 on:
