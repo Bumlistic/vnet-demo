@@ -1,33 +1,35 @@
 name: "Terraform — Deploy RG & Storage"
 
-# Trigger on push to main branch
+# Manual trigger only
 on:
-  push:
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   terraform:
-    runs-on: self-hosted  # Your self-hosted agent
+    runs-on: self-hosted  # Use your self-hosted agent
 
     env:
       TF_WORKING_DIR: '.' 
-      TF_PLAN_FILE: 'tfplan.bin'
+      TF_PLAN_FILE: 'tfplan-rg-storage.bin'
+      TF_STATE_FILE: 'rg-storage.tfstate'
 
     steps:
-      # 1️⃣ Checkout code
+      # 1️⃣ Checkout the repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2️⃣ Install Terraform
+      # 2️⃣ Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: '1.13.3'
 
-      # 3️⃣ Terraform Init
+      # 3️⃣ Terraform Init (local backend with dedicated state file)
       - name: Terraform Init
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform init
+        run: |
+          terraform init \
+            -backend-config="path=${{ env.TF_STATE_FILE }}"
 
       # 4️⃣ Terraform Plan
       - name: Terraform Plan
