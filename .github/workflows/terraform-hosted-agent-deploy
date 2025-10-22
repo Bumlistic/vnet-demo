@@ -1,15 +1,16 @@
-name: "Terraform Deploy RG & Storage"
+name: "Terraform - Deploy RG & Storage"  # Changed em-dash to hyphen
 
 # Manual trigger only
 on:
   workflow_dispatch:
+    inputs: {}  # Optional, ensures GitHub UI renders correctly
 
 jobs:
   terraform:
     runs-on: self-hosted  # Use your self-hosted agent
 
     env:
-      TF_WORKING_DIR: '.' 
+      TF_WORKING_DIR: '.'
       TF_PLAN_FILE: 'tfplan-rg-storage.bin'
       TF_STATE_FILE: 'rg-storage.tfstate'
 
