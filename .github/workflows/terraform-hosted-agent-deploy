@@ -48,3 +48,5 @@ jobs:
       - name: Show Terraform Outputs
         working-directory: ${{ env.TF_WORKING_DIR }}
         run: terraform output
+      
+      # check for completion
