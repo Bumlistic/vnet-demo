@@ -1,0 +1,50 @@
+name: "Terraform — Deploy RG & Storage"
+
+# Trigger on push to main branch
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  terraform:
+    runs-on: self-hosted  # Your self-hosted agent
+
+    env:
+      TF_WORKING_DIR: '.' 
+      TF_PLAN_FILE: 'tfplan.bin'
+
+    steps:
+      # 1️⃣ Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2️⃣ Install Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: '1.13.3'
+
+      # 3️⃣ Terraform Init
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
+
+      # 4️⃣ Terraform Plan
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform plan -out="${{ env.TF_PLAN_FILE }}" \
+            -var="subscription_id=${{ secrets.TF_SUBSCRIPTION_ID }}" \
+            -var="client_id=${{ secrets.TF_CLIENT_ID }}" \
+            -var="client_secret=${{ secrets.TF_CLIENT_SECRET }}" \
+            -var="tenant_id=${{ secrets.TF_TENANT_ID }}"
+
+      # 5️⃣ Terraform Apply
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -auto-approve "${{ env.TF_PLAN_FILE }}"
+
+      # 6️⃣ Show outputs
+      - name: Show Terraform Outputs
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform output
